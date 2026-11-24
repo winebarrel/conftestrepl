@@ -141,3 +141,34 @@ func TestQuitWithUnsavedChanges(t *testing.T) {
 		t.Fatal("second Ctrl+C should quit")
 	}
 }
+
+func TestCtrlCInSavePrompt(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "", 4)
+
+	send := func(msg tea.KeyMsg) tea.Cmd {
+		t.Helper()
+		nm, cmd := m.Update(msg)
+		m = nm.(model)
+		return cmd
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	send(tea.KeyMsg{Type: tea.KeyCtrlS})
+	if !m.saving {
+		t.Fatal("Ctrl+S without -p should open the save prompt")
+	}
+
+	cmd := send(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if m.saving {
+		t.Fatal("Ctrl+C should cancel the save prompt")
+	}
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("Ctrl+C in the save prompt should not quit")
+		}
+	}
+	if m.quitArmed {
+		t.Fatal("Ctrl+C in the save prompt should not arm quit")
+	}
+}

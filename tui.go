@@ -196,7 +196,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyCtrlC {
+	if msg.Type == tea.KeyCtrlC && !m.saving {
 		if m.editor.Value() != m.savedValue && !m.quitArmed {
 			m.quitArmed = true
 			m.notice = styleErr.Render("unsaved changes: ^C again to quit")
@@ -218,7 +218,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filename.Blur()
 			m.save(name)
 			return m, m.focusCmd()
-		case tea.KeyEsc:
+		case tea.KeyEsc, tea.KeyCtrlC:
+			// Ctrl+C in the prompt only cancels the prompt, like Esc. The quit
+			// confirmation would not be visible here.
 			m.saving = false
 			m.filename.Blur()
 			m.notice = "save canceled"

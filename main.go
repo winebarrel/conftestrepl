@@ -7,6 +7,10 @@ import (
 
 	"github.com/alecthomas/kong"
 	tea "github.com/charmbracelet/bubbletea"
+
+	// Register conftest's custom builtins (parse_config, parse_config_file,
+	// parse_combined_config_files) so conftest policies work as-is.
+	_ "github.com/open-policy-agent/conftest/builtins"
 )
 
 var version = "dev"

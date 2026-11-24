@@ -47,7 +47,7 @@ Flags:
 
 Inputs are handled the same way as in conftest. conftestrepl walks `<dir>` recursively, follows symlinks, and parses every file conftest can parse (YAML, JSON, HCL, Dockerfile, TOML, and others).
 
-`data.conftest.file.name` and `data.conftest.file.dir` are set during evaluation, so existing conftest policies still work.
+`data.conftest.file.name` and `data.conftest.file.dir` are set during evaluation, so existing conftest policies still work. All OPA builtins are available, plus conftest's own `parse_config`, `parse_config_file` and `parse_combined_config_files`.
 
 ### Output
 
@@ -79,7 +79,7 @@ Editing uses the standard [Bubble Tea textarea](https://github.com/charmbracelet
 | --- | --- |
 | `C-y` | Insert the text last deleted with `C-k` / `C-u` / `C-w` / `M-d` |
 | `Tab` | Insert `--tab-width` spaces |
-| `Ctrl+S` | Save the policy (to `-p`, or prompts for a file name) |
+| `Ctrl+S` | Save the policy (to `-p`, or prompts for a file name; `Esc` or `Ctrl+C` cancels the prompt) |
 | `Ctrl+O` | Switch focus between the editor and the output (the output scrolls with arrows / PgUp / PgDn) |
 | `Ctrl+C` | Quit (press twice if there are unsaved changes) |
 

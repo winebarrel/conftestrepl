@@ -163,3 +163,20 @@ func TestEvaluateCanceled(t *testing.T) {
 		t.Errorf("evaluation was not canceled promptly: %s", elapsed)
 	}
 }
+
+func TestConftestBuiltins(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{"x.json": map[string]any{}}}
+	src := `package main
+
+a := parse_config("yaml", "a: 1")
+b := parse_config_file("testdata/inputs/config.json")
+`
+	got := evalJSON(t, ev, src).(map[string]any)["x.json"].(map[string]any)
+
+	if !reflect.DeepEqual(got["a"], map[string]any{"a": float64(1)}) {
+		t.Errorf("parse_config = %v", got["a"])
+	}
+	if !reflect.DeepEqual(got["b"], map[string]any{"kind": "Config"}) {
+		t.Errorf("parse_config_file = %v", got["b"])
+	}
+}
