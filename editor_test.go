@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestExpandTabs(t *testing.T) {
@@ -201,5 +203,59 @@ c := parse_combined_config_files(["../inputs/config.json"])
 	}
 	if _, ok := got["x.json"]["c"]; !ok {
 		t.Errorf("parse_combined_config_files is undefined (output %s)", msg.output)
+	}
+}
+
+func TestHeaderFitsWidth(t *testing.T) {
+	long := "/home/user/work/very/long/path/policies/main.rego *"
+	for _, width := range []int{0, 1, 2, 5, 10, 30, 52, 80} {
+		for _, right := range []string{"main.rego", long, ""} {
+			got := header(width, "Policy (Rego)", right)
+			if w := lipgloss.Width(got); w > width {
+				t.Errorf("header(%d, ..., %q) is %d wide: %q", width, right, w, got)
+			}
+		}
+	}
+
+	if got := header(30, "Policy (Rego)", "main.rego"); got != "Policy (Rego)        main.rego" {
+		t.Errorf("short header = %q", got)
+	}
+
+	got := header(30, "Policy (Rego)", long)
+	if lipgloss.Width(got) != 30 || !strings.HasPrefix(got, "Policy (Rego)") || !strings.HasSuffix(got, "main.rego *") || !strings.Contains(got, "…") {
+		t.Errorf("long header = %q", got)
+	}
+}
+
+// TestViewWithLongPolicyPath checks that a long -p path doesn't push the layout
+// past the terminal size.
+func TestViewWithLongPolicyPath(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{"x.json": map[string]any{}}}
+	path := "/home/user/work/very/long/path/to/the/policies/directory/main.rego"
+	m := newModel(ev, "dir", path, "package main\n\nx := 1\nlast_line := 2", 4)
+
+	nm, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 12})
+	m = nm.(model)
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")}) // mark as modified
+	m = nm.(model)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if len(lines) != 12 {
+		t.Errorf("view has %d lines, want 12:\n%s", len(lines), view)
+	}
+	for i, l := range lines {
+		if w := lipgloss.Width(l); w > 60 {
+			t.Errorf("line %d is %d wide: %q", i, w, l)
+		}
+	}
+	if !strings.Contains(view, "Policy (Rego)") || !strings.Contains(view, "main.rego *") {
+		t.Errorf("header missing:\n%s", view)
+	}
+	if strings.Contains(view, "/home/user") {
+		t.Errorf("editor header should show only the base name:\n%s", view)
+	}
+	if !strings.Contains(view, "last_line := 2") {
+		t.Errorf("last editor line is cut off:\n%s", view)
 	}
 }

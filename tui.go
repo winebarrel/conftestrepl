@@ -375,13 +375,39 @@ func (m *model) layout() {
 	m.output.SetContent(content)
 }
 
-// header lays out left and right on one line of the given width, truncating left if needed.
+// header lays out left and right on one line that never exceeds width.
+// When they don't fit, right keeps its tail (e.g. "…/main.rego *") but gives up to
+// half the width to left, and left is then truncated to the space that remains.
 func header(width int, left, right string) string {
-	if avail := width - lipgloss.Width(right) - 1; lipgloss.Width(left) > avail {
-		left = ansi.Truncate(left, max(avail, 0), "…")
+	width = max(width, 0)
+	lw, rw := lipgloss.Width(left), lipgloss.Width(right)
+
+	if lw+1+rw > width {
+		if maxRight := max(width-min(lw, width/2)-1, 0); rw > maxRight {
+			right = truncateLeft(right, maxRight)
+			rw = lipgloss.Width(right)
+		}
+		if avail := max(width-rw-1, 0); lw > avail {
+			left = ansi.Truncate(left, avail, "…")
+			lw = lipgloss.Width(left)
+		}
 	}
-	gap := max(width-lipgloss.Width(left)-lipgloss.Width(right), 1)
-	return left + strings.Repeat(" ", gap) + right
+
+	gap := max(width-lw-rw, 1)
+	return ansi.Truncate(left+strings.Repeat(" ", gap)+right, width, "")
+}
+
+// truncateLeft keeps the last cells of s so that the result, including a leading "…",
+// is at most width cells wide.
+func truncateLeft(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w <= width {
+		return s
+	}
+	if width <= 1 {
+		return ansi.Truncate("…", width, "")
+	}
+	return "…" + ansi.Cut(s, w-(width-1), w)
 }
 
 func (m model) View() string {
@@ -400,7 +426,7 @@ func (m model) View() string {
 	}
 	name := "[no file]"
 	if m.policyPath != "" {
-		name = m.policyPath
+		name = filepath.Base(m.policyPath)
 	}
 	if m.editor.Value() != m.savedValue {
 		name += " *"
