@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -170,5 +172,34 @@ func TestCtrlCInSavePrompt(t *testing.T) {
 	}
 	if m.quitArmed {
 		t.Fatal("Ctrl+C in the save prompt should not arm quit")
+	}
+}
+
+// TestPolicyRelativePaths checks that conftest builtins resolve relative paths against
+// the directory of the -p policy file, not the current directory.
+func TestPolicyRelativePaths(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{"x.json": map[string]any{}}}
+	src := `package main
+
+b := parse_config_file("../inputs/config.json")
+c := parse_combined_config_files(["../inputs/config.json"])
+`
+	m := newModel(ev, "dir", "testdata/policies/main.rego", src, 4)
+
+	msg := m.evalCmd(1)().(evalMsg)
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+
+	var got map[string]map[string]any
+	if err := json.Unmarshal([]byte(msg.output), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(got["x.json"]["b"], map[string]any{"kind": "Config"}) {
+		t.Errorf("parse_config_file = %v (output %s)", got["x.json"]["b"], msg.output)
+	}
+	if _, ok := got["x.json"]["c"]; !ok {
+		t.Errorf("parse_combined_config_files is undefined (output %s)", msg.output)
 	}
 }

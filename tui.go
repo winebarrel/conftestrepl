@@ -123,9 +123,12 @@ func (m *model) evalCmd(seq int) tea.Cmd {
 	m.stopEval()
 
 	src := m.editor.Value()
+	// The module name is the policy path itself, as in conftest: its builtins
+	// (parse_config_file, parse_combined_config_files) resolve relative paths
+	// against the directory of the module file.
 	name := "policy.rego"
 	if m.policyPath != "" {
-		name = filepath.Base(m.policyPath)
+		name = m.policyPath
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), evalTimeout)
@@ -397,7 +400,7 @@ func (m model) View() string {
 	}
 	name := "[no file]"
 	if m.policyPath != "" {
-		name = filepath.Base(m.policyPath)
+		name = m.policyPath
 	}
 	if m.editor.Value() != m.savedValue {
 		name += " *"
