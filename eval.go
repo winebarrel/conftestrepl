@@ -21,6 +21,10 @@ const combinedPath = "Combined"
 type evaluator struct {
 	configs  map[string]any
 	combined bool
+	// libs are extra modules (--lib) compiled together with the edited policy.
+	libs []*ast.Module
+	// data is the document loaded with --data.
+	data map[string]any
 }
 
 // evaluate compiles src and evaluates data.<package> for each input (or once for the
@@ -35,17 +39,21 @@ func (e *evaluator) evaluate(ctx context.Context, filename string, src string) (
 		return "", err
 	}
 
-	store := inmem.NewFromObject(map[string]any{
-		"conftest": map[string]any{
-			"file": map[string]any{},
-		},
-	})
+	// Each evaluation gets its own store: data.conftest.file is rewritten per input,
+	// and an evaluation that was canceled may still be running.
+	store := inmem.NewFromObject(e.storeData())
 
-	query, err := rego.New(
+	opts := []func(*rego.Rego){
 		rego.Query(module.Package.Path.String()),
 		rego.ParsedModule(module),
 		rego.Store(store),
-	).PrepareForEval(ctx)
+	}
+	for _, lib := range e.libs {
+		// The compiler rewrites modules, so give it a copy of the shared ones.
+		opts = append(opts, rego.ParsedModule(lib.Copy()))
+	}
+
+	query, err := rego.New(opts...).PrepareForEval(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -97,6 +105,26 @@ func (e *evaluator) evaluate(ctx context.Context, filename string, src string) (
 	}
 
 	return string(b), nil
+}
+
+// storeData returns the --data documents plus an empty data.conftest.file.
+// The maps from e.data are not modified (the store copies what is written to it).
+func (e *evaluator) storeData() map[string]any {
+	root := make(map[string]any, len(e.data)+1)
+	for k, v := range e.data {
+		root[k] = v
+	}
+
+	conftest := map[string]any{}
+	if m, ok := root["conftest"].(map[string]any); ok {
+		for k, v := range m {
+			conftest[k] = v
+		}
+	}
+	conftest["file"] = map[string]any{}
+	root["conftest"] = conftest
+
+	return root
 }
 
 func evalOne(ctx context.Context, query rego.PreparedEvalQuery, store storage.Store, path string, input any) (any, error) {

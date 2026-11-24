@@ -37,6 +37,10 @@ Flags:
   -h, --help             Show context-sensitive help.
   -p, --policy=STRING    Rego policy file to load into the editor. Saved back to
                          this file.
+      --lib=PATH         Rego files or directories to load alongside the edited
+                         policy (e.g. for import data.lib...). Repeatable.
+  -d, --data=PATH        JSON/YAML files or directories to load as data (same as
+                         conftest --data). Repeatable.
       --combine          Combine all inputs into one input and evaluate once
                          (same as conftest --combine).
       --tab-width=4      Number of spaces a tab is converted to.
@@ -48,6 +52,20 @@ Flags:
 Inputs are handled the same way as in conftest. conftestrepl walks `<dir>` recursively, follows symlinks, and parses every file conftest can parse (YAML, JSON, HCL, Dockerfile, TOML, and others).
 
 `data.conftest.file.name` and `data.conftest.file.dir` are set during evaluation, so existing conftest policies still work. All OPA builtins are available, plus conftest's own `parse_config`, `parse_config_file` and `parse_combined_config_files`.
+
+### Libraries and data
+
+`--lib` loads Rego modules that you don't edit, such as the `lib` packages your policy imports. A directory is searched recursively for `.rego` files, the same way conftest loads its `-p` directories. The file opened with `-p` is skipped, so you can point `--lib` at the whole policy directory:
+
+```sh
+conftestrepl -p policy/deployment.rego --lib policy/ inputdir/
+```
+
+Modules in the same package as the edited policy (for example, other files in `package main`) are merged into its output.
+
+`-d` / `--data` loads JSON and YAML documents into `data`, the same as `conftest --data`. Files in subdirectories are nested under the directory name. For example, `-d data/` loads `data/sub/x.yaml` as `data.sub`.
+
+Libraries and data are loaded once, at startup. Restart conftestrepl to pick up changes to them.
 
 ### Output
 
@@ -87,5 +105,5 @@ The editor holds no tab characters. Tabs in a loaded file or in pasted text beco
 
 ## Limitations
 
-- Only the single module in the editor is evaluated. Other policy or library modules (such as `import data.lib...`) and `--data` files are not loaded.
+- Only the module in the editor can be edited. Changes to `--lib` and `--data` files are not reloaded while conftestrepl is running.
 - The policy must use Rego v1 syntax. Rego v0 syntax is not supported.
