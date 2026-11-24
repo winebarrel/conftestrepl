@@ -19,7 +19,8 @@ jobs:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.15.0
+          # Resolves to the latest golangci-lint v2 release (the action only supports v2).
+          version: latest
 
   test:
     runs-on: ubuntu-latest
