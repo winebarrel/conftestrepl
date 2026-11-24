@@ -6,20 +6,7 @@ A TUI REPL for writing [Rego](https://www.openpolicyagent.org/docs/latest/policy
 
 Edit a policy in the left pane. The right pane shows the evaluated value of `data.<package>` for each input file, and it updates as you type. You see the whole package value, not just deny/warn pass or fail.
 
-```
-╭──────────────────────────────────╮╭──────────────────────────────────╮
-│Policy (Rego)               p.rego││Output                     3 files│
-│package main                      ││{                                 │
-│                                  ││  "inputdir/deployment.yaml": {   │
-│deny contains msg if {            ││    "deny": [                     │
-│    input.kind == "Deployment"    ││      "containers must not run…"  │
-│    msg := "containers must not…" ││    ],                            │
-│}                                 ││    "is_deployment": true         │
-│                                  ││  },                              │
-│is_deployment if input.kind == …  ││  ...                             │
-╰──────────────────────────────────╯╰──────────────────────────────────╯
-inputdir/ · 3 files   mode: per-file          ^S save  ^O switch  ^C quit
-```
+![](https://github.com/user-attachments/assets/29d5a60d-9e9e-4a8a-88f6-ea9af024c7a3)
 
 ## Installation
 
