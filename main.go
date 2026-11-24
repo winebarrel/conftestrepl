@@ -18,7 +18,7 @@ var version = "dev"
 type cli struct {
 	Dir      string           `arg:"" help:"Directory (or file) of input files to evaluate."`
 	Policy   string           `short:"p" help:"Rego policy file to load into the editor. Saved back to this file."`
-	Lib      []string         `type:"path" placeholder:"PATH" help:"Rego files or directories to load alongside the edited policy (e.g. for import data.lib...). Repeatable."`
+	Lib      []string         `placeholder:"PATH" help:"Rego files or directories to load alongside the edited policy (e.g. for import data.lib...). Repeatable."`
 	Data     []string         `short:"d" placeholder:"PATH" help:"JSON/YAML files or directories to load as data (same as conftest --data). Repeatable."`
 	Combine  bool             `help:"Combine all inputs into one input and evaluate once (same as conftest --combine)."`
 	TabWidth int              `default:"4" help:"Number of spaces a tab is converted to."`
