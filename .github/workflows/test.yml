@@ -10,6 +10,17 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -17,14 +28,5 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Check formatting
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "These files are not gofmt-ed:"
-            echo "$unformatted"
-            exit 1
-          fi
-      - run: go vet ./...
       - run: go build ./...
       - run: go test -race ./...
