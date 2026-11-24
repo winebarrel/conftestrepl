@@ -1,0 +1,102 @@
+package main
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func TestExpandTabs(t *testing.T) {
+	if got := expandTabs("a\tb\n\tc", 2); got != "a  b\n  c" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRemovedText(t *testing.T) {
+	tests := []struct {
+		before, after string
+		start         int
+		want          string
+	}{
+		{"hello world", "hello ", 6, "world"},
+		{"hello world", "world", 0, "hello "},
+		{"foo bar baz", "foo baz", 4, "bar "},
+		{"line1\nline2", "line1line2", 5, "\n"},
+		{"日本語テキスト", "日本語", 3, "テキスト"},
+		{"same", "same", 0, ""},
+		{"ab", "abc", 0, ""},
+	}
+	for _, tt := range tests {
+		if got := removedText(tt.before, tt.after, tt.start); got != tt.want {
+			t.Errorf("removedText(%q, %q, %d) = %q, want %q", tt.before, tt.after, tt.start, got, tt.want)
+		}
+	}
+}
+
+// TestEditorKeys drives the real model with key messages.
+func TestEditorKeys(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "foo bar baz\nqux", 4)
+	m.width, m.height = 120, 40
+	m.layout()
+
+	send := func(msg tea.KeyMsg) {
+		t.Helper()
+		nm, _ := m.Update(msg)
+		m = nm.(model)
+	}
+	alt := func(r rune) tea.KeyMsg {
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: true}
+	}
+
+	// Cursor is at the end after SetValue.
+	send(tea.KeyMsg{Type: tea.KeyUp})
+	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+	send(alt('f')) // after "foo"
+	send(alt('d')) // delete " bar"
+	if m.killBuf != " bar" || m.editor.Value() != "foo baz\nqux" {
+		t.Fatalf("M-d: kill = %q, value = %q", m.killBuf, m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlK}) // delete " baz"
+	if m.killBuf != " baz" || m.editor.Value() != "foo\nqux" {
+		t.Fatalf("C-k: kill = %q, value = %q", m.killBuf, m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+	send(tea.KeyMsg{Type: tea.KeyCtrlY})
+	if m.editor.Value() != " bazfoo\nqux" {
+		t.Fatalf("C-y: value = %q", m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlE})
+	send(tea.KeyMsg{Type: tea.KeyCtrlW})
+	if m.killBuf != " bazfoo" || m.editor.Value() != "\nqux" {
+		t.Fatalf("C-w: kill = %q, value = %q", m.killBuf, m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyTab})
+	if m.editor.Value() != "    \nqux" {
+		t.Fatalf("tab: value = %q", m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a\tb"), Paste: true})
+	if m.editor.Value() != "    a    b\nqux" {
+		t.Fatalf("paste: value = %q", m.editor.Value())
+	}
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.killBuf != "    a    b" || m.editor.Value() != "\nqux" {
+		t.Fatalf("C-u: kill = %q, value = %q", m.killBuf, m.editor.Value())
+	}
+
+	// C-k at the end of a line joins the next line; the killed text is the newline.
+	send(tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.killBuf != "\n" || m.editor.Value() != "qux" {
+		t.Fatalf("C-k at EOL: kill = %q, value = %q", m.killBuf, m.editor.Value())
+	}
+
+	if m.seq == 0 {
+		t.Error("edits should bump the evaluation sequence")
+	}
+}
