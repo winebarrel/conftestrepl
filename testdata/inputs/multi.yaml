@@ -1,0 +1,7 @@
+kind: ConfigMap
+metadata:
+  name: app-config
+---
+kind: Service
+spec:
+  type: ClusterIP

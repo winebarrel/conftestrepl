@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  template:
+    spec:
+      volumes:
+        - name: cfg
+          configMap:
+            name: app-config
+        - name: extra
+          configMap:
+            name: extra-config
