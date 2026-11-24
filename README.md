@@ -1,5 +1,7 @@
 # conftestrepl
 
+[![CI](https://github.com/winebarrel/conftestrepl/actions/workflows/ci.yml/badge.svg)](https://github.com/winebarrel/conftestrepl/actions/workflows/ci.yml)
+
 A TUI REPL for writing [Rego](https://www.openpolicyagent.org/docs/latest/policy-language/) policies against [conftest](https://www.conftest.dev/) inputs.
 
 Edit a policy in the left pane. The right pane shows the evaluated value of `data.<package>` for each input file, and it updates as you type. You see the whole package value, not just deny/warn pass or fail.
