@@ -100,3 +100,44 @@ func TestEditorKeys(t *testing.T) {
 		t.Error("edits should bump the evaluation sequence")
 	}
 }
+
+func TestQuitWithUnsavedChanges(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "package main", 4)
+
+	ctrlC := tea.KeyMsg{Type: tea.KeyCtrlC}
+	isQuit := func(cmd tea.Cmd) bool {
+		if cmd == nil {
+			return false
+		}
+		_, ok := cmd().(tea.QuitMsg)
+		return ok
+	}
+
+	// No unsaved changes: quit right away.
+	if _, cmd := m.Update(ctrlC); !isQuit(cmd) {
+		t.Fatal("Ctrl+C without changes should quit")
+	}
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = nm.(model)
+
+	nm, cmd := m.Update(ctrlC)
+	m = nm.(model)
+	if isQuit(cmd) || !m.quitArmed {
+		t.Fatal("first Ctrl+C with unsaved changes should ask for confirmation")
+	}
+
+	// Any other key disarms the confirmation.
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = nm.(model)
+	if m.quitArmed {
+		t.Fatal("another key should disarm quit")
+	}
+
+	nm, _ = m.Update(ctrlC)
+	m = nm.(model)
+	if _, cmd := m.Update(ctrlC); !isQuit(cmd) {
+		t.Fatal("second Ctrl+C should quit")
+	}
+}

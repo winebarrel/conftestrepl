@@ -69,7 +69,7 @@ With `--combine`, all files are combined into one `input` of the form `[{"path":
 {"deny": ["..."]}
 ```
 
-The policy is evaluated again 300ms after you stop typing. If the policy has an error, the error is shown above the last good result, which stays on screen dimmed.
+The policy is evaluated again 300ms after you stop typing. A new evaluation cancels the one still running, and each evaluation times out after 10 seconds. If the policy has an error, the error is shown above the last good result, which stays on screen dimmed.
 
 ### Keys
 
@@ -81,6 +81,11 @@ Editing uses the standard [Bubble Tea textarea](https://github.com/charmbracelet
 | `Tab` | Insert `--tab-width` spaces |
 | `Ctrl+S` | Save the policy (to `-p`, or prompts for a file name) |
 | `Ctrl+O` | Switch focus between the editor and the output (the output scrolls with arrows / PgUp / PgDn) |
-| `Ctrl+C` | Quit |
+| `Ctrl+C` | Quit (press twice if there are unsaved changes) |
 
 The editor holds no tab characters. Tabs in a loaded file or in pasted text become `--tab-width` spaces. Mouse input is not captured, so you can select and copy text with your terminal.
+
+## Limitations
+
+- Only the single module in the editor is evaluated. Other policy or library modules (such as `import data.lib...`) and `--data` files are not loaded.
+- The policy must use Rego v1 syntax. Rego v0 syntax is not supported.

@@ -17,7 +17,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const debounceDelay = 300 * time.Millisecond
+const (
+	debounceDelay = 300 * time.Millisecond
+	evalTimeout   = 10 * time.Second
+)
 
 type pane int
 
@@ -29,9 +32,10 @@ const (
 type debounceMsg struct{ seq int }
 
 type evalMsg struct {
-	seq    int
-	output string
-	err    error
+	seq      int
+	output   string
+	err      error
+	canceled bool
 }
 
 var (
@@ -70,6 +74,8 @@ type model struct {
 
 	seq        int
 	appliedSeq int
+	cancelEval context.CancelFunc
+	quitArmed  bool
 	lastOutput string
 	lastErr    error
 
@@ -107,19 +113,44 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.evalCmd(m.seq))
+	// Go through debounceMsg so the initial evaluation is started (and cancelable) from Update.
+	seq := m.seq
+	return tea.Batch(textarea.Blink, func() tea.Msg { return debounceMsg{seq: seq} })
 }
 
-func (m model) evalCmd(seq int) tea.Cmd {
+// evalCmd cancels the evaluation still running, if any, and starts a new one with a timeout.
+func (m *model) evalCmd(seq int) tea.Cmd {
+	m.stopEval()
+
 	src := m.editor.Value()
 	name := "policy.rego"
 	if m.policyPath != "" {
 		name = filepath.Base(m.policyPath)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), evalTimeout)
+	m.cancelEval = cancel
+	ev := m.eval
+
 	return func() tea.Msg {
-		out, err := m.eval.evaluate(context.Background(), name, src)
+		defer cancel()
+		out, err := ev.evaluate(ctx, name, src)
+
+		switch ctx.Err() {
+		case context.Canceled:
+			return evalMsg{seq: seq, canceled: true}
+		case context.DeadlineExceeded:
+			err = fmt.Errorf("evaluation timed out after %s", evalTimeout)
+		}
+
 		return evalMsg{seq: seq, output: out, err: err}
+	}
+}
+
+func (m *model) stopEval() {
+	if m.cancelEval != nil {
+		m.cancelEval()
+		m.cancelEval = nil
 	}
 }
 
@@ -138,7 +169,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.evalCmd(msg.seq)
 
 	case evalMsg:
-		if msg.seq < m.appliedSeq {
+		if msg.canceled || msg.seq < m.appliedSeq {
 			return m, nil
 		}
 		m.appliedSeq = msg.seq
@@ -166,8 +197,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
+		if m.editor.Value() != m.savedValue && !m.quitArmed {
+			m.quitArmed = true
+			m.notice = styleErr.Render("unsaved changes: ^C again to quit")
+			return m, nil
+		}
+		m.stopEval()
 		return m, tea.Quit
 	}
+	m.quitArmed = false
 
 	if m.saving {
 		switch msg.Type {

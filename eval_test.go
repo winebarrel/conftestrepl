@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testPolicy = `package main
@@ -145,5 +146,20 @@ func TestEvaluateEmptyAndError(t *testing.T) {
 	_, err = ev.evaluate(context.Background(), "policy.rego", "package main\n\nx := undefined_fn(1)\n")
 	if err == nil || !strings.Contains(err.Error(), "rego_type_error") {
 		t.Errorf("expected compile error, got %v", err)
+	}
+}
+
+func TestEvaluateCanceled(t *testing.T) {
+	ev := &evaluator{configs: mustLoad(t)}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := ev.evaluate(ctx, "policy.rego", "package main\n\nn := count([x | some x in numbers.range(1, 100000000)])\n")
+	if err == nil {
+		t.Fatal("expected an error from a canceled evaluation")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("evaluation was not canceled promptly: %s", elapsed)
 	}
 }
