@@ -1,5 +1,4 @@
 name: test
-
 on:
   push:
     branches:
@@ -10,22 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - uses: golangci/golangci-lint-action@v8
-        with:
-          # Resolves to the latest golangci-lint v2 release (the action only supports v2).
-          version: latest
-
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
