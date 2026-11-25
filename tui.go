@@ -131,6 +131,8 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 	ed.MaxHeight = 0
 	ed.SetStyles(editorStyles(true))
 	ed.SetValue(policy)
+	// SetValue leaves the cursor at the end; start at the top of the policy instead.
+	ed.MoveToBegin()
 	ed.Focus()
 
 	fn := textinput.New()

@@ -65,7 +65,7 @@ func TestHelpPopup(t *testing.T) {
 
 	// "?" opens the help from the output pane but is typed in the editor.
 	send(textKey("?"))
-	if m.showHelp || m.editor.Value() != "package main?" {
+	if m.showHelp || m.editor.Value() != "?package main" {
 		t.Fatalf("? in the editor: help = %v, value = %q", m.showHelp, m.editor.Value())
 	}
 	send(ctrlKey('o'))

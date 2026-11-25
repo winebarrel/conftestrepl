@@ -38,6 +38,14 @@ func TestRemovedText(t *testing.T) {
 	}
 }
 
+func TestEditorStartsAtBeginning(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "line1\nline2\nline3", 4)
+	if got := m.editorPos(); got != (textPos{}) {
+		t.Errorf("cursor = %+v, want beginning", got)
+	}
+}
+
 // TestEditorKeys drives the real model with key messages.
 func TestEditorKeys(t *testing.T) {
 	ev := &evaluator{configs: map[string]any{}}
@@ -54,8 +62,6 @@ func TestEditorKeys(t *testing.T) {
 		return tea.KeyPressMsg{Code: r, Mod: tea.ModAlt}
 	}
 
-	// Cursor is at the end after SetValue.
-	send(tea.KeyPressMsg{Code: tea.KeyUp})
 	send(ctrlKey('a'))
 	send(alt('f')) // after "foo"
 	send(alt('d')) // delete " bar"
