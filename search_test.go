@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestFindText(t *testing.T) {
@@ -44,7 +44,7 @@ func TestSearchKeys(t *testing.T) {
 	m.width, m.height = 120, 40
 	m.layout()
 
-	send := func(msg tea.KeyMsg) tea.Cmd {
+	send := func(msg tea.Msg) tea.Cmd {
 		t.Helper()
 		nm, cmd := m.Update(msg)
 		m = nm.(model)
@@ -53,18 +53,18 @@ func TestSearchKeys(t *testing.T) {
 	typ := func(s string) {
 		t.Helper()
 		for _, r := range s {
-			send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			send(textKey(string(r)))
 		}
 	}
 
 	// Start at the top.
 	for range 10 {
-		send(tea.KeyMsg{Type: tea.KeyUp})
+		send(tea.KeyPressMsg{Code: tea.KeyUp})
 	}
-	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+	send(ctrlKey('a'))
 	value := m.editor.Value()
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	if !m.searching {
 		t.Fatal("Ctrl+R should start a search")
 	}
@@ -74,12 +74,12 @@ func TestSearchKeys(t *testing.T) {
 		t.Fatalf("incremental search: pos = %+v", p)
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	if p := m.editorPos(); p != (textPos{4, 2}) {
 		t.Fatalf("next match: pos = %+v", p)
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	if p := m.editorPos(); p != (textPos{1, 2}) {
 		t.Fatalf("wrapped match: pos = %+v", p)
 	}
@@ -93,7 +93,7 @@ func TestSearchKeys(t *testing.T) {
 	}
 
 	// Esc returns to where the search started. Ctrl+C does the same and does not quit.
-	cmd := send(tea.KeyMsg{Type: tea.KeyCtrlC})
+	cmd := send(ctrlKey('c'))
 	if m.searching {
 		t.Fatal("Ctrl+C should end the search")
 	}
@@ -107,9 +107,9 @@ func TestSearchKeys(t *testing.T) {
 	}
 
 	// Enter keeps the cursor at the match.
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	typ("deny")
-	send(tea.KeyMsg{Type: tea.KeyEnter})
+	send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.searching {
 		t.Fatal("Enter should end the search")
 	}
@@ -149,7 +149,7 @@ func TestSearchRefineStaysAtMatch(t *testing.T) {
 	m.width, m.height = 120, 40
 	m.layout()
 
-	send := func(msg tea.KeyMsg) {
+	send := func(msg tea.Msg) {
 		t.Helper()
 		nm, _ := m.Update(msg)
 		m = nm.(model)
@@ -157,18 +157,18 @@ func TestSearchRefineStaysAtMatch(t *testing.T) {
 	typ := func(s string) {
 		t.Helper()
 		for _, r := range s {
-			send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			send(textKey(string(r)))
 		}
 	}
 
 	for range 10 {
-		send(tea.KeyMsg{Type: tea.KeyUp})
+		send(tea.KeyPressMsg{Code: tea.KeyUp})
 	}
-	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+	send(ctrlKey('a'))
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	typ("x")
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	if p := m.editorPos(); p != (textPos{1, 0}) {
 		t.Fatalf("next match: pos = %+v", p)
 	}
@@ -186,7 +186,7 @@ func TestSearchRefineStaysAtMatch(t *testing.T) {
 	}
 
 	// Deleting a character searches again from where the search started.
-	send(tea.KeyMsg{Type: tea.KeyBackspace})
+	send(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if p := m.editorPos(); p != (textPos{0, 0}) {
 		t.Fatalf("shortened query: pos = %+v", p)
 	}
@@ -198,14 +198,14 @@ func TestStatusPromptsFitWidth(t *testing.T) {
 	m.width, m.height = 40, 10
 	m.layout()
 
-	send := func(msg tea.KeyMsg) {
+	send := func(msg tea.Msg) {
 		t.Helper()
 		nm, _ := m.Update(msg)
 		m = nm.(model)
 	}
-	long := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("z", 100))}
+	long := tea.PasteMsg{Content: strings.Repeat("z", 100)}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(ctrlKey('r'))
 	send(long)
 	if !m.searchFailed {
 		t.Fatal("search should fail")
@@ -213,9 +213,9 @@ func TestStatusPromptsFitWidth(t *testing.T) {
 	if w := lipgloss.Width(m.statusLine()); w > m.width {
 		t.Errorf("search prompt width = %d, want <= %d", w, m.width)
 	}
-	send(tea.KeyMsg{Type: tea.KeyEsc})
+	send(tea.KeyPressMsg{Code: tea.KeyEscape})
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlS})
+	send(ctrlKey('s'))
 	send(long)
 	if w := lipgloss.Width(m.statusLine()); w > m.width {
 		t.Errorf("save prompt width = %d, want <= %d", w, m.width)

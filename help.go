@@ -3,8 +3,8 @@ package main
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -42,9 +42,7 @@ var helpSections = []helpSection{
 	}},
 }
 
-var styleHelpBox = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1)
-
-func helpView() string {
+func (m model) helpView() string {
 	keyWidth := 0
 	for _, s := range helpSections {
 		for _, k := range s.keys {
@@ -53,25 +51,21 @@ func helpView() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(styleActive.Render("Keys"))
+	b.WriteString(m.theme.active.Render("Keys"))
 	for _, s := range helpSections {
-		b.WriteString("\n\n" + styleDim.Render(s.title))
+		b.WriteString("\n\n" + m.theme.dim.Render(s.title))
 		for _, k := range s.keys {
 			b.WriteString("\n" + k[0] + strings.Repeat(" ", keyWidth-lipgloss.Width(k[0])+2) + k[1])
 		}
 	}
-	b.WriteString("\n\n" + styleDim.Render("Esc / F1 to close"))
+	b.WriteString("\n\n" + m.theme.dim.Render("Esc / F1 to close"))
 
-	return styleHelpBox.Render(b.String())
+	return m.theme.helpBox.Render(b.String())
 }
 
-func (m model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyF1, tea.KeyEsc, tea.KeyEnter, tea.KeyCtrlC:
-		m.showHelp = false
-		return m, nil
-	}
-	if msg.Type == tea.KeyRunes && string(msg.Runes) == "q" {
+func (m model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "f1", "esc", "enter", "ctrl+c", "q":
 		m.showHelp = false
 	}
 	// Other keys are ignored while the help is shown.
