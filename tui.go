@@ -376,6 +376,10 @@ func (m *model) layout() {
 
 	_, innerWidth, innerHeight := m.paneSize()
 
+	// Keep the status line prompts on one line.
+	m.filename.Width = promptWidth(m.filename, m.width, 0)
+	m.search.Width = promptWidth(m.search, m.width, len(searchNotFound))
+
 	m.editor.SetWidth(innerWidth)
 	m.editor.SetHeight(innerHeight)
 

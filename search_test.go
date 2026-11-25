@@ -1,9 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestFindText(t *testing.T) {
@@ -138,5 +140,84 @@ func TestSearchWrappedLines(t *testing.T) {
 		if got := m.editorPos(); got != p {
 			t.Errorf("moveEditorCursor(%+v) = %+v", p, got)
 		}
+	}
+}
+
+func TestSearchRefineStaysAtMatch(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "x := 1\nx := 2\nx := 1", 4)
+	m.width, m.height = 120, 40
+	m.layout()
+
+	send := func(msg tea.KeyMsg) {
+		t.Helper()
+		nm, _ := m.Update(msg)
+		m = nm.(model)
+	}
+	typ := func(s string) {
+		t.Helper()
+		for _, r := range s {
+			send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+	}
+
+	for range 10 {
+		send(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	typ("x")
+	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	if p := m.editorPos(); p != (textPos{1, 0}) {
+		t.Fatalf("next match: pos = %+v", p)
+	}
+
+	// The longer query still matches at the current match, so the cursor stays.
+	typ(" := ")
+	if p := m.editorPos(); p != (textPos{1, 0}) {
+		t.Fatalf("refined query: pos = %+v", p)
+	}
+
+	// It no longer matches here, so the cursor moves on.
+	typ("1")
+	if p := m.editorPos(); p != (textPos{2, 0}) {
+		t.Fatalf("refined query moved on: pos = %+v", p)
+	}
+
+	// Deleting a character searches again from where the search started.
+	send(tea.KeyMsg{Type: tea.KeyBackspace})
+	if p := m.editorPos(); p != (textPos{0, 0}) {
+		t.Fatalf("shortened query: pos = %+v", p)
+	}
+}
+
+func TestStatusPromptsFitWidth(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "", 4)
+	m.width, m.height = 40, 10
+	m.layout()
+
+	send := func(msg tea.KeyMsg) {
+		t.Helper()
+		nm, _ := m.Update(msg)
+		m = nm.(model)
+	}
+	long := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("z", 100))}
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlR})
+	send(long)
+	if !m.searchFailed {
+		t.Fatal("search should fail")
+	}
+	if w := lipgloss.Width(m.statusLine()); w > m.width {
+		t.Errorf("search prompt width = %d, want <= %d", w, m.width)
+	}
+	send(tea.KeyMsg{Type: tea.KeyEsc})
+
+	send(tea.KeyMsg{Type: tea.KeyCtrlS})
+	send(long)
+	if w := lipgloss.Width(m.statusLine()); w > m.width {
+		t.Errorf("save prompt width = %d, want <= %d", w, m.width)
 	}
 }

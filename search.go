@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // textPos is a cursor position in the editor: a line index and a rune column in that line.
@@ -158,16 +159,30 @@ func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	before := m.search.Value()
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
-	if m.search.Value() != before {
-		m.runSearch(m.searchOrigin)
+	if after := m.search.Value(); after != before {
+		// Like Emacs isearch: a longer query stays at the current match if it still
+		// matches there; any other change searches again from where the search started.
+		from := m.searchOrigin
+		if strings.HasPrefix(after, before) {
+			from = m.searchMatch
+		}
+		m.runSearch(from)
 	}
 	return m, cmd
 }
 
+const searchNotFound = "  not found"
+
 func (m model) searchView() string {
 	v := m.search.View()
 	if m.searchFailed {
-		v += "  " + styleErr.Render("not found")
+		v += styleErr.Render(searchNotFound)
 	}
 	return v
+}
+
+// promptWidth returns the Width for a textinput in the status line so that the prompt,
+// the text, the cursor and reserve cells fit in width.
+func promptWidth(ti textinput.Model, width, reserve int) int {
+	return max(width-lipgloss.Width(ti.Prompt)-1-reserve, 1)
 }
