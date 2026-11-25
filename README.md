@@ -89,6 +89,7 @@ Editing uses the standard [Bubble Tea textarea](https://github.com/charmbracelet
 | `Ctrl+S` | Save the policy (to `-p`, or prompts for a file name; `Esc` or `Ctrl+C` cancels the prompt) |
 | `Ctrl+R` | Search the policy. The cursor jumps to the first match as you type; `Ctrl+R` again goes to the next match (wrapping around), `Enter` stays there, and `Esc` or `Ctrl+C` returns to where the search started. Case-insensitive unless the query has an upper-case letter |
 | `Ctrl+O` | Switch focus between the editor and the output (the output scrolls with arrows / PgUp / PgDn) |
+| `F1` | Show the list of keys (`?` also works when the output has focus; `Esc`, `F1` or `q` closes it) |
 | `Ctrl+C` | Quit (press twice if there are unsaved changes) |
 
 The editor holds no tab characters. Tabs in a loaded file or in pasted text become `--tab-width` spaces. Mouse input is not captured, so you can select and copy text with your terminal.
