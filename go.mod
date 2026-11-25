@@ -5,7 +5,7 @@ go 1.26.8
 require (
 	github.com/alecthomas/kong v1.17.0
 	github.com/charmbracelet/bubbles v1.0.0
-	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/bubbletea/v2 v2.1.1
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/open-policy-agent/conftest v0.71.1
