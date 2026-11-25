@@ -76,6 +76,16 @@ With `--combine`, all files are combined into one `input` of the form `[{"path":
 {"deny": ["..."]}
 ```
 
+Output from `print()` calls is shown above the result, one line per call, in the form `[<input path>] <policy>:<line>: <message>` (without the input path in `--combine` mode). The lines are included in Ctrl+R search.
+
+```
+[inputdir/a.yaml] policy/main.rego:5: kind: Deployment
+
+{
+  "inputdir/a.yaml": {"deny": ["..."]}
+}
+```
+
 The policy is evaluated again 300ms after you stop typing. A new evaluation cancels the one still running, and each evaluation times out after 10 seconds. If the policy has an error, the error is shown above the last good result, which stays on screen dimmed.
 
 ### Keys
