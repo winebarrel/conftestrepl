@@ -48,6 +48,7 @@ type theme struct {
 	pane      lipgloss.Style
 	paneFocus lipgloss.Style
 	helpBox   lipgloss.Style
+	match     lipgloss.Style
 }
 
 func newTheme(isDark bool) theme {
@@ -68,6 +69,7 @@ func newTheme(isDark bool) theme {
 		pane:      pane,
 		paneFocus: pane.BorderForeground(accent),
 		helpBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1),
+		match:     lipgloss.NewStyle().Reverse(true),
 	}
 }
 
@@ -105,6 +107,8 @@ type model struct {
 	searchOrigin textPos
 	searchMatch  textPos
 	searchFailed bool
+	// searchScroll is the x and y offset of the output when a search in it started.
+	searchScroll [2]int
 
 	showHelp bool
 
@@ -220,6 +224,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastOutput = msg.output
 		}
 		m.layout()
+		if m.searchingOutput() {
+			// The output changed under the search; find the match again.
+			m.runSearch(m.searchMatch)
+		}
 		return m, nil
 
 	case tea.BackgroundColorMsg:
@@ -313,9 +321,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.filename.Focus()
 
 	case "ctrl+r":
-		if m.focus == paneEditor {
-			return m.startSearch()
-		}
+		return m.startSearch()
 
 	case "f1":
 		m.showHelp = true
@@ -470,15 +476,25 @@ func (m *model) layout() {
 	m.output.SetWidth(innerWidth)
 	m.output.SetHeight(max(outHeight, 0))
 
-	content := m.lastOutput
-	if content == "" && m.lastErr == nil {
-		content = m.theme.dim.Render("(empty policy)")
-	}
-	if m.lastErr != nil {
+	content := m.outputText()
+	switch {
+	case m.lastErr != nil:
 		content = m.theme.stale.Render(content)
+	case m.lastOutput == "":
+		content = m.theme.dim.Render(content)
 	}
-	m.output.SetContent(content)
+	m.output.SetContent(m.highlightOutput(content))
 }
+
+// outputText returns the text shown in the output, without styles.
+func (m model) outputText() string {
+	if m.lastOutput == "" && m.lastErr == nil {
+		return emptyPolicy
+	}
+	return m.lastOutput
+}
+
+const emptyPolicy = "(empty policy)"
 
 // header lays out left and right on one line that never exceeds width.
 // When they don't fit, right keeps its tail (e.g. "…/main.rego *") but gives up to

@@ -107,18 +107,101 @@ func (m *model) moveEditorCursor(p textPos) {
 	m.editor, _ = m.editor.Update(nil)
 }
 
+// searchingOutput reports whether the search runs in the output instead of the editor.
+func (m model) searchingOutput() bool {
+	return m.searching && m.focus == paneOutput
+}
+
 func (m model) startSearch() (tea.Model, tea.Cmd) {
 	m.searching = true
 	m.searchFailed = false
-	m.searchOrigin = m.editorPos()
+	if m.focus == paneOutput {
+		// Search the output from the top of the view.
+		m.searchOrigin = textPos{row: m.output.YOffset()}
+		m.searchScroll = [2]int{m.output.XOffset(), m.output.YOffset()}
+	} else {
+		m.searchOrigin = m.editorPos()
+	}
 	m.searchMatch = m.searchOrigin
 	m.search.SetValue("")
 	return m, m.search.Focus()
 }
 
 func (m *model) endSearch() {
+	output := m.searchingOutput()
 	m.searching = false
 	m.search.Blur()
+	if output {
+		// Remove the highlight.
+		m.layout()
+	}
+}
+
+// cancelSearch ends the search and goes back to where it started.
+func (m *model) cancelSearch() {
+	if m.searchingOutput() {
+		m.endSearch()
+		m.output.SetXOffset(m.searchScroll[0])
+		m.output.SetYOffset(m.searchScroll[1])
+		return
+	}
+	m.endSearch()
+	m.moveEditorCursor(m.searchOrigin)
+}
+
+// searchText returns the text that the search runs on.
+func (m model) searchText() string {
+	if m.searchingOutput() {
+		return m.outputText()
+	}
+	return m.editor.Value()
+}
+
+// moveToMatch shows p, the position of a match or the search origin.
+func (m *model) moveToMatch(p textPos) {
+	if !m.searchingOutput() {
+		m.moveEditorCursor(p)
+		return
+	}
+
+	// Redraw the output with the highlight at the new match.
+	m.layout()
+	if m.search.Value() == "" || m.searchFailed {
+		m.output.SetXOffset(m.searchScroll[0])
+		m.output.SetYOffset(m.searchScroll[1])
+		return
+	}
+	start, end := m.outputMatchCells()
+	m.output.EnsureVisible(p.row, start, end)
+}
+
+// outputMatchCells returns the cell range of the current match in its output line.
+func (m model) outputMatchCells() (int, int) {
+	lines := strings.Split(m.outputText(), "\n")
+	if m.searchMatch.row >= len(lines) {
+		return 0, 0
+	}
+	line := []rune(lines[m.searchMatch.row])
+	col := min(m.searchMatch.col, len(line))
+	end := min(col+len([]rune(m.search.Value())), len(line))
+	start := lipgloss.Width(string(line[:col]))
+	return start, start + lipgloss.Width(string(line[col:end]))
+}
+
+// highlightOutput highlights the current match in content, the rendered output.
+func (m model) highlightOutput(content string) string {
+	if !m.searchingOutput() || m.search.Value() == "" || m.searchFailed {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if m.searchMatch.row >= len(lines) {
+		return content
+	}
+	start, end := m.outputMatchCells()
+	if end > start {
+		lines[m.searchMatch.row] = lipgloss.StyleRanges(lines[m.searchMatch.row], lipgloss.NewRange(start, end, m.theme.match))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // runSearch moves the cursor to the first match at or after from.
@@ -127,15 +210,18 @@ func (m *model) runSearch(from textPos) {
 	if query == "" {
 		m.searchFailed = false
 		m.searchMatch = m.searchOrigin
-		m.moveEditorCursor(m.searchOrigin)
+		m.moveToMatch(m.searchOrigin)
 		return
 	}
 
-	p, ok := findText(m.editor.Value(), query, from)
+	p, ok := findText(m.searchText(), query, from)
 	m.searchFailed = !ok
 	if ok {
 		m.searchMatch = p
-		m.moveEditorCursor(p)
+		m.moveToMatch(p)
+	} else if m.searchingOutput() {
+		// Remove the highlight of the previous match.
+		m.layout()
 	}
 }
 
@@ -146,8 +232,7 @@ func (m model) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "esc", "ctrl+c":
-		m.endSearch()
-		m.moveEditorCursor(m.searchOrigin)
+		m.cancelSearch()
 		return m, nil
 
 	case "ctrl+r":
