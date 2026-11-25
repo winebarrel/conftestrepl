@@ -72,6 +72,12 @@ type model struct {
 
 	killBuf string
 
+	searching    bool
+	search       textinput.Model
+	searchOrigin textPos
+	searchMatch  textPos
+	searchFailed bool
+
 	seq        int
 	appliedSeq int
 	cancelEval context.CancelFunc
@@ -109,6 +115,7 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 		policyPath: policyPath,
 		savedValue: policy,
 		filename:   fn,
+		search:     newSearchInput(),
 	}
 }
 
@@ -192,6 +199,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	if m.saving {
 		m.filename, cmd = m.filename.Update(msg)
+	} else if m.searching {
+		var edCmd tea.Cmd
+		m.search, cmd = m.search.Update(msg)
+		// Keep the editor cursor blinking at the match.
+		m.editor, edCmd = m.editor.Update(msg)
+		cmd = tea.Batch(cmd, edCmd)
 	} else if m.focus == paneEditor {
 		m.editor, cmd = m.editor.Update(msg)
 	}
@@ -199,6 +212,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.searching {
+		return m.handleSearchKey(msg)
+	}
+
 	if msg.Type == tea.KeyCtrlC && !m.saving {
 		if m.editor.Value() != m.savedValue && !m.quitArmed {
 			m.quitArmed = true
@@ -246,6 +263,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filename.SetValue("")
 		m.editor.Blur()
 		return m, m.filename.Focus()
+
+	case tea.KeyCtrlR:
+		if m.focus == paneEditor {
+			return m.startSearch()
+		}
 
 	case tea.KeyCtrlO:
 		if m.focus == paneEditor {
@@ -477,6 +499,9 @@ func (m model) statusLine() string {
 	if m.saving {
 		return m.filename.View()
 	}
+	if m.searching {
+		return m.searchView()
+	}
 
 	mode := "per-file"
 	if m.eval.combined {
@@ -495,7 +520,7 @@ func (m model) statusLine() string {
 	}
 
 	left := strings.Join(parts, "   ")
-	right := styleDim.Render("^S save  ^O switch  ^C quit")
+	right := styleDim.Render("^S save  ^R search  ^O switch  ^C quit")
 
 	return styleDim.Render(header(m.width, left, right))
 }

@@ -87,6 +87,7 @@ Editing uses the standard [Bubble Tea textarea](https://github.com/charmbracelet
 | `C-y` | Insert the text last deleted with `C-k` / `C-u` / `C-w` / `M-d` |
 | `Tab` | Insert `--tab-width` spaces |
 | `Ctrl+S` | Save the policy (to `-p`, or prompts for a file name; `Esc` or `Ctrl+C` cancels the prompt) |
+| `Ctrl+R` | Search the policy. The cursor jumps to the first match as you type; `Ctrl+R` again goes to the next match (wrapping around), `Enter` stays there, and `Esc` or `Ctrl+C` returns to where the search started. Case-insensitive unless the query has an upper-case letter |
 | `Ctrl+O` | Switch focus between the editor and the output (the output scrolls with arrows / PgUp / PgDn) |
 | `Ctrl+C` | Quit (press twice if there are unsaved changes) |
 
