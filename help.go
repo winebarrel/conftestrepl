@@ -25,7 +25,7 @@ var helpSections = []helpSection{
 		{"Tab", "insert spaces"},
 	}},
 	{"Search", [][2]string{
-		{"C-r", "search / next match"},
+		{"C-r", "search the focused pane / next match"},
 		{"Enter", "stay at the match"},
 		{"Esc", "go back to where the search started"},
 	}},

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -219,5 +220,89 @@ func TestStatusPromptsFitWidth(t *testing.T) {
 	send(long)
 	if w := lipgloss.Width(m.statusLine()); w > m.width {
 		t.Errorf("save prompt width = %d, want <= %d", w, m.width)
+	}
+}
+
+func TestSearchOutput(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "", 4)
+	m.width, m.height = 60, 10
+	var lines []string
+	for i := range 30 {
+		lines = append(lines, fmt.Sprintf("line %02d", i))
+	}
+	lines[20] = "line 20 target " + strings.Repeat("x", 80) + " far"
+	m.lastOutput = strings.Join(lines, "\n")
+	m.layout()
+
+	send := func(msg tea.Msg) {
+		t.Helper()
+		nm, _ := m.Update(msg)
+		m = nm.(model)
+	}
+	typ := func(s string) {
+		t.Helper()
+		for _, r := range s {
+			send(textKey(string(r)))
+		}
+	}
+
+	send(ctrlKey('o'))
+	send(ctrlKey('r'))
+	if !m.searching {
+		t.Fatal("Ctrl+R in the output should start a search")
+	}
+	if !strings.Contains(m.statusLine(), "Search:") {
+		t.Fatalf("status line = %q", m.statusLine())
+	}
+
+	typ("target")
+	if m.searchMatch != (textPos{20, 8}) {
+		t.Fatalf("match = %+v", m.searchMatch)
+	}
+	if y := m.output.YOffset(); y > 20 || 20 >= y+m.output.Height() {
+		t.Fatalf("match line not visible: yoffset = %d", y)
+	}
+	if !strings.Contains(m.output.GetContent(), "\x1b[7m") {
+		t.Fatal("match should be highlighted")
+	}
+
+	// A match beyond the pane width scrolls horizontally.
+	typ(" x")
+	if m.output.XOffset() != 0 {
+		t.Fatalf("near match scrolled: xoffset = %d", m.output.XOffset())
+	}
+	send(ctrlKey('c'))
+	send(ctrlKey('r'))
+	typ("x far")
+	if m.searchFailed || m.output.XOffset() == 0 {
+		t.Fatalf("far match: failed = %v, xoffset = %d", m.searchFailed, m.output.XOffset())
+	}
+
+	// Esc returns to where the search started and removes the highlight.
+	send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.searching || m.output.YOffset() != 0 || m.output.XOffset() != 0 {
+		t.Fatalf("canceled search: searching = %v, offset = %d,%d", m.searching, m.output.XOffset(), m.output.YOffset())
+	}
+	if strings.Contains(m.output.GetContent(), "\x1b[7m") {
+		t.Fatal("highlight should be removed")
+	}
+
+	// Ctrl+R goes to the next match; Enter stays there.
+	send(ctrlKey('r'))
+	typ("line 2")
+	if m.searchMatch != (textPos{20, 0}) {
+		t.Fatalf("first match = %+v", m.searchMatch)
+	}
+	send(ctrlKey('r'))
+	if m.searchMatch != (textPos{21, 0}) {
+		t.Fatalf("next match = %+v", m.searchMatch)
+	}
+	send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.searching || m.output.YOffset() == 0 {
+		t.Fatalf("confirmed search: searching = %v, yoffset = %d", m.searching, m.output.YOffset())
+	}
+	if m.focus != paneOutput || m.editor.Value() != "" {
+		t.Fatal("output search should not touch the editor")
 	}
 }
