@@ -78,6 +78,8 @@ type model struct {
 	searchMatch  textPos
 	searchFailed bool
 
+	showHelp bool
+
 	seq        int
 	appliedSeq int
 	cancelEval context.CancelFunc
@@ -212,6 +214,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.showHelp {
+		return m.handleHelpKey(msg)
+	}
 	if m.searching {
 		return m.handleSearchKey(msg)
 	}
@@ -269,6 +274,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startSearch()
 		}
 
+	case tea.KeyF1:
+		m.showHelp = true
+		return m, nil
+
 	case tea.KeyCtrlO:
 		if m.focus == paneEditor {
 			m.focus = paneOutput
@@ -282,6 +291,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.focus == paneOutput {
+		if msg.Type == tea.KeyRunes && string(msg.Runes) == "?" {
+			m.showHelp = true
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.output, cmd = m.output.Update(msg)
 		return m, cmd
@@ -496,7 +509,11 @@ func (m model) View() string {
 		outStyle.Width(m.width-paneWidth-2).Height(paneHeight).MaxHeight(paneHeight+2).Render(outPane),
 	)
 
-	return lipgloss.JoinVertical(lipgloss.Left, panes, m.statusLine())
+	view := lipgloss.JoinVertical(lipgloss.Left, panes, m.statusLine())
+	if m.showHelp {
+		view = overlay(view, helpView(), m.width, m.height)
+	}
+	return view
 }
 
 func (m model) statusLine() string {
@@ -524,7 +541,7 @@ func (m model) statusLine() string {
 	}
 
 	left := strings.Join(parts, "   ")
-	right := styleDim.Render("^S save  ^R search  ^O switch  ^C quit")
+	right := styleDim.Render("^S save  ^R search  ^O switch  F1 help  ^C quit")
 
 	return styleDim.Render(header(m.width, left, right))
 }
