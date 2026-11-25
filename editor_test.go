@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"image/color"
 	"reflect"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestExpandTabs(t *testing.T) {
@@ -44,58 +45,58 @@ func TestEditorKeys(t *testing.T) {
 	m.width, m.height = 120, 40
 	m.layout()
 
-	send := func(msg tea.KeyMsg) {
+	send := func(msg tea.Msg) {
 		t.Helper()
 		nm, _ := m.Update(msg)
 		m = nm.(model)
 	}
-	alt := func(r rune) tea.KeyMsg {
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: true}
+	alt := func(r rune) tea.KeyPressMsg {
+		return tea.KeyPressMsg{Code: r, Mod: tea.ModAlt}
 	}
 
 	// Cursor is at the end after SetValue.
-	send(tea.KeyMsg{Type: tea.KeyUp})
-	send(tea.KeyMsg{Type: tea.KeyCtrlA})
+	send(tea.KeyPressMsg{Code: tea.KeyUp})
+	send(ctrlKey('a'))
 	send(alt('f')) // after "foo"
 	send(alt('d')) // delete " bar"
 	if m.killBuf != " bar" || m.editor.Value() != "foo baz\nqux" {
 		t.Fatalf("M-d: kill = %q, value = %q", m.killBuf, m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlK}) // delete " baz"
+	send(ctrlKey('k')) // delete " baz"
 	if m.killBuf != " baz" || m.editor.Value() != "foo\nqux" {
 		t.Fatalf("C-k: kill = %q, value = %q", m.killBuf, m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlA})
-	send(tea.KeyMsg{Type: tea.KeyCtrlY})
+	send(ctrlKey('a'))
+	send(ctrlKey('y'))
 	if m.editor.Value() != " bazfoo\nqux" {
 		t.Fatalf("C-y: value = %q", m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlE})
-	send(tea.KeyMsg{Type: tea.KeyCtrlW})
+	send(ctrlKey('e'))
+	send(ctrlKey('w'))
 	if m.killBuf != " bazfoo" || m.editor.Value() != "\nqux" {
 		t.Fatalf("C-w: kill = %q, value = %q", m.killBuf, m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyTab})
+	send(tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.editor.Value() != "    \nqux" {
 		t.Fatalf("tab: value = %q", m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a\tb"), Paste: true})
+	send(tea.PasteMsg{Content: "a	b"})
 	if m.editor.Value() != "    a    b\nqux" {
 		t.Fatalf("paste: value = %q", m.editor.Value())
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyCtrlU})
+	send(ctrlKey('u'))
 	if m.killBuf != "    a    b" || m.editor.Value() != "\nqux" {
 		t.Fatalf("C-u: kill = %q, value = %q", m.killBuf, m.editor.Value())
 	}
 
 	// C-k at the end of a line joins the next line; the killed text is the newline.
-	send(tea.KeyMsg{Type: tea.KeyCtrlK})
+	send(ctrlKey('k'))
 	if m.killBuf != "\n" || m.editor.Value() != "qux" {
 		t.Fatalf("C-k at EOL: kill = %q, value = %q", m.killBuf, m.editor.Value())
 	}
@@ -109,7 +110,7 @@ func TestQuitWithUnsavedChanges(t *testing.T) {
 	ev := &evaluator{configs: map[string]any{}}
 	m := newModel(ev, "dir", "", "package main", 4)
 
-	ctrlC := tea.KeyMsg{Type: tea.KeyCtrlC}
+	ctrlC := ctrlKey('c')
 	isQuit := func(cmd tea.Cmd) bool {
 		if cmd == nil {
 			return false
@@ -123,7 +124,7 @@ func TestQuitWithUnsavedChanges(t *testing.T) {
 		t.Fatal("Ctrl+C without changes should quit")
 	}
 
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	nm, _ := m.Update(textKey("x"))
 	m = nm.(model)
 
 	nm, cmd := m.Update(ctrlC)
@@ -133,7 +134,7 @@ func TestQuitWithUnsavedChanges(t *testing.T) {
 	}
 
 	// Any other key disarms the confirmation.
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	nm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = nm.(model)
 	if m.quitArmed {
 		t.Fatal("another key should disarm quit")
@@ -150,20 +151,20 @@ func TestCtrlCInSavePrompt(t *testing.T) {
 	ev := &evaluator{configs: map[string]any{}}
 	m := newModel(ev, "dir", "", "", 4)
 
-	send := func(msg tea.KeyMsg) tea.Cmd {
+	send := func(msg tea.Msg) tea.Cmd {
 		t.Helper()
 		nm, cmd := m.Update(msg)
 		m = nm.(model)
 		return cmd
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	send(tea.KeyMsg{Type: tea.KeyCtrlS})
+	send(textKey("x"))
+	send(ctrlKey('s'))
 	if !m.saving {
 		t.Fatal("Ctrl+S without -p should open the save prompt")
 	}
 
-	cmd := send(tea.KeyMsg{Type: tea.KeyCtrlC})
+	cmd := send(ctrlKey('c'))
 	if m.saving {
 		t.Fatal("Ctrl+C should cancel the save prompt")
 	}
@@ -236,10 +237,10 @@ func TestViewWithLongPolicyPath(t *testing.T) {
 
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 12})
 	m = nm.(model)
-	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")}) // mark as modified
+	nm, _ = m.Update(textKey(" ")) // mark as modified
 	m = nm.(model)
 
-	view := m.View()
+	view := m.render()
 	lines := strings.Split(view, "\n")
 	if len(lines) != 12 {
 		t.Errorf("view has %d lines, want 12:\n%s", len(lines), view)
@@ -257,5 +258,36 @@ func TestViewWithLongPolicyPath(t *testing.T) {
 	}
 	if !strings.Contains(view, "last_line := 2") {
 		t.Errorf("last editor line is cut off:\n%s", view)
+	}
+}
+
+func ctrlKey(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl}
+}
+
+func textKey(s string) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: []rune(s)[0], Text: s}
+}
+
+func TestBackgroundColorSetsTheme(t *testing.T) {
+	ev := &evaluator{configs: map[string]any{}}
+	m := newModel(ev, "dir", "", "", 4)
+	m.width, m.height = 80, 20
+	m.layout()
+
+	if m.theme.active.GetForeground() != newTheme(true).active.GetForeground() {
+		t.Fatal("the theme should default to dark")
+	}
+
+	nm, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	m = nm.(model)
+	if m.theme.active.GetForeground() != newTheme(false).active.GetForeground() {
+		t.Error("a light background should select the light theme")
+	}
+
+	nm, _ = m.Update(tea.BackgroundColorMsg{Color: color.Black})
+	m = nm.(model)
+	if m.theme.active.GetForeground() != newTheme(true).active.GetForeground() {
+		t.Error("a dark background should select the dark theme")
 	}
 }

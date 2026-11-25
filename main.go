@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/alecthomas/kong"
-	tea "github.com/charmbracelet/bubbletea"
 
 	// Register conftest's custom builtins (parse_config, parse_config_file,
 	// parse_combined_config_files) so conftest policies work as-is.
@@ -67,6 +67,6 @@ func run(c *cli) error {
 	ev := &evaluator{configs: configs, combined: c.Combine, libs: libs, data: data}
 	m := newModel(ev, c.Dir, c.Policy, policy, c.TabWidth)
 
-	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(m).Run()
 	return err
 }

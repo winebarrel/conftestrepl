@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -38,26 +38,54 @@ type evalMsg struct {
 	canceled bool
 }
 
-var (
-	colorAccent = lipgloss.AdaptiveColor{Light: "#4a52c7", Dark: "#a3a9ff"}
-	colorDim    = lipgloss.AdaptiveColor{Light: "#5d6773", Dark: "#7d8794"}
-	colorLine   = lipgloss.AdaptiveColor{Light: "#d9dee4", Dark: "#323944"}
-	colorErr    = lipgloss.AdaptiveColor{Light: "#c62828", Dark: "#ff8a80"}
+// theme holds the styles for a light or a dark terminal background.
+type theme struct {
+	dim       lipgloss.Style
+	active    lipgloss.Style
+	err       lipgloss.Style
+	stale     lipgloss.Style
+	errBox    lipgloss.Style
+	pane      lipgloss.Style
+	paneFocus lipgloss.Style
+	helpBox   lipgloss.Style
+}
 
-	styleDim       = lipgloss.NewStyle().Foreground(colorDim)
-	styleActive    = lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
-	styleErr       = lipgloss.NewStyle().Foreground(colorErr)
-	styleStale     = lipgloss.NewStyle().Faint(true)
-	styleErrBox    = lipgloss.NewStyle().Foreground(colorErr).Border(lipgloss.ThickBorder(), false, false, false, true).BorderForeground(colorErr).PaddingLeft(1)
-	stylePane      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorLine)
-	stylePaneFocus = stylePane.BorderForeground(colorAccent)
-)
+func newTheme(isDark bool) theme {
+	lightDark := lipgloss.LightDark(isDark)
+	accent := lightDark(lipgloss.Color("#4a52c7"), lipgloss.Color("#a3a9ff"))
+	dim := lightDark(lipgloss.Color("#5d6773"), lipgloss.Color("#7d8794"))
+	line := lightDark(lipgloss.Color("#d9dee4"), lipgloss.Color("#323944"))
+	errColor := lightDark(lipgloss.Color("#c62828"), lipgloss.Color("#ff8a80"))
+
+	pane := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(line)
+
+	return theme{
+		dim:       lipgloss.NewStyle().Foreground(dim),
+		active:    lipgloss.NewStyle().Foreground(accent).Bold(true),
+		err:       lipgloss.NewStyle().Foreground(errColor),
+		stale:     lipgloss.NewStyle().Faint(true),
+		errBox:    lipgloss.NewStyle().Foreground(errColor).Border(lipgloss.ThickBorder(), false, false, false, true).BorderForeground(errColor).PaddingLeft(1),
+		pane:      pane,
+		paneFocus: pane.BorderForeground(accent),
+		helpBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1),
+	}
+}
+
+func editorStyles(isDark bool) textarea.Styles {
+	s := textarea.DefaultStyles(isDark)
+	s.Focused.CursorLine = lipgloss.NewStyle()
+	s.Blurred.CursorLine = lipgloss.NewStyle()
+	return s
+}
 
 type model struct {
 	eval       *evaluator
 	inputLabel string
 	fileCount  int
 	tabWidth   int
+
+	// theme follows the terminal background, which is queried at startup.
+	theme theme
 
 	editor textarea.Model
 	output viewport.Model
@@ -97,8 +125,7 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 	ed.Prompt = ""
 	ed.CharLimit = 0
 	ed.MaxHeight = 0
-	ed.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ed.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	ed.SetStyles(editorStyles(true))
 	ed.SetValue(policy)
 	ed.Focus()
 
@@ -111,6 +138,7 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 		inputLabel: inputLabel,
 		fileCount:  len(ev.configs),
 		tabWidth:   tabWidth,
+		theme:      newTheme(true),
 		editor:     ed,
 		output:     newOutputView(),
 		focus:      paneEditor,
@@ -124,7 +152,7 @@ func newModel(ev *evaluator, inputLabel string, policyPath, policy string, tabWi
 func (m model) Init() tea.Cmd {
 	// Go through debounceMsg so the initial evaluation is started (and cancelable) from Update.
 	seq := m.seq
-	return tea.Batch(textarea.Blink, func() tea.Msg { return debounceMsg{seq: seq} })
+	return tea.Batch(textarea.Blink, tea.RequestBackgroundColor, func() tea.Msg { return debounceMsg{seq: seq} })
 }
 
 // evalCmd cancels the evaluation still running, if any, and starts a new one with a timeout.
@@ -194,8 +222,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout()
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.BackgroundColorMsg:
+		m.setTheme(msg.IsDark())
+		return m, nil
+
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case tea.PasteMsg:
+		return m.handlePaste(msg)
 	}
 
 	var cmd tea.Cmd
@@ -213,7 +248,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) setTheme(isDark bool) {
+	m.theme = newTheme(isDark)
+	m.editor.SetStyles(editorStyles(isDark))
+	m.filename.SetStyles(textinput.DefaultStyles(isDark))
+	m.search.SetStyles(textinput.DefaultStyles(isDark))
+	m.layout()
+}
+
+func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.showHelp {
 		return m.handleHelpKey(msg)
 	}
@@ -221,10 +264,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	if msg.Type == tea.KeyCtrlC && !m.saving {
+	if msg.String() == "ctrl+c" && !m.saving {
 		if m.editor.Value() != m.savedValue && !m.quitArmed {
 			m.quitArmed = true
-			m.notice = styleErr.Render("unsaved changes: ^C again to quit")
+			m.notice = m.theme.err.Render("unsaved changes: ^C again to quit")
 			return m, nil
 		}
 		m.stopEval()
@@ -233,8 +276,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.quitArmed = false
 
 	if m.saving {
-		switch msg.Type {
-		case tea.KeyEnter:
+		switch msg.String() {
+		case "enter":
 			name := strings.TrimSpace(m.filename.Value())
 			if name == "" {
 				return m, nil
@@ -243,7 +286,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filename.Blur()
 			m.save(name)
 			return m, m.focusCmd()
-		case tea.KeyEsc, tea.KeyCtrlC:
+		case "esc", "ctrl+c":
 			// Ctrl+C in the prompt only cancels the prompt, like Esc. The quit
 			// confirmation would not be visible here.
 			m.saving = false
@@ -258,8 +301,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	m.notice = ""
 
-	switch msg.Type {
-	case tea.KeyCtrlS:
+	switch msg.String() {
+	case "ctrl+s":
 		if m.policyPath != "" {
 			m.save(m.policyPath)
 			return m, nil
@@ -269,16 +312,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editor.Blur()
 		return m, m.filename.Focus()
 
-	case tea.KeyCtrlR:
+	case "ctrl+r":
 		if m.focus == paneEditor {
 			return m.startSearch()
 		}
 
-	case tea.KeyF1:
+	case "f1":
 		m.showHelp = true
 		return m, nil
 
-	case tea.KeyCtrlO:
+	case "ctrl+o":
 		if m.focus == paneEditor {
 			m.focus = paneOutput
 			m.editor.Blur()
@@ -291,7 +334,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.focus == paneOutput {
-		if msg.Type == tea.KeyRunes && string(msg.Runes) == "?" {
+		if msg.Text == "?" {
 			m.showHelp = true
 			return m, nil
 		}
@@ -303,17 +346,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handleEditorKey(msg)
 }
 
-func (m model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleEditorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	before := m.editor.Value()
 	var cmd tea.Cmd
 
 	switch {
-	case msg.Type == tea.KeyCtrlY:
+	case msg.String() == "ctrl+y":
 		if m.killBuf != "" {
 			m.editor.InsertString(m.killBuf)
 		}
 
-	case msg.Type == tea.KeyTab:
+	case msg.String() == "tab":
 		m.editor.InsertString(strings.Repeat(" ", m.tabWidth))
 
 	case key.Matches(msg, m.editor.KeyMap.DeleteAfterCursor),
@@ -326,13 +369,36 @@ func (m model) handleEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		if msg.Type == tea.KeyRunes {
-			// Pasted text can contain tabs; expand them before the textarea sanitizer does.
-			msg.Runes = []rune(expandTabs(string(msg.Runes), m.tabWidth))
-		}
 		m.editor, cmd = m.editor.Update(msg)
 	}
 
+	return m.edited(before, cmd)
+}
+
+func (m model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch {
+	case m.showHelp:
+		return m, nil
+	case m.saving:
+		m.filename, cmd = m.filename.Update(msg)
+		return m, cmd
+	case m.searching:
+		return m.updateSearchInput(msg)
+	case m.focus != paneEditor:
+		return m, nil
+	}
+
+	before := m.editor.Value()
+	// Pasted text can contain tabs; expand them before the textarea sanitizer does.
+	msg.Content = expandTabs(msg.Content, m.tabWidth)
+	m.editor, cmd = m.editor.Update(msg)
+	return m.edited(before, cmd)
+}
+
+// edited schedules an evaluation if the policy changed from before.
+func (m model) edited(before string, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	if m.editor.Value() == before {
 		return m, cmd
 	}
@@ -358,7 +424,7 @@ func (m *model) save(path string) {
 		content += "\n"
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		m.notice = styleErr.Render("save failed: " + err.Error())
+		m.notice = m.theme.err.Render("save failed: " + err.Error())
 		return
 	}
 	m.policyPath = path
@@ -378,7 +444,7 @@ func (m model) errorBox(width int) string {
 	if m.lastErr == nil {
 		return ""
 	}
-	return styleErrBox.Width(width).Render(m.lastErr.Error())
+	return m.theme.errBox.Width(width).Render(m.lastErr.Error())
 }
 
 // layout resizes the editor and the output view and refreshes the output content.
@@ -390,8 +456,8 @@ func (m *model) layout() {
 	_, innerWidth, innerHeight := m.paneSize()
 
 	// Keep the status line prompts on one line.
-	m.filename.Width = promptWidth(m.filename, m.width, 0)
-	m.search.Width = promptWidth(m.search, m.width, len(searchNotFound))
+	m.filename.SetWidth(promptWidth(m.filename, m.width, 0))
+	m.search.SetWidth(promptWidth(m.search, m.width, len(searchNotFound)))
 
 	m.editor.SetWidth(innerWidth)
 	m.editor.SetHeight(innerHeight)
@@ -401,15 +467,15 @@ func (m *model) layout() {
 		outHeight -= lipgloss.Height(box)
 	}
 
-	m.output.Width = innerWidth
-	m.output.Height = max(outHeight, 0)
+	m.output.SetWidth(innerWidth)
+	m.output.SetHeight(max(outHeight, 0))
 
 	content := m.lastOutput
 	if content == "" && m.lastErr == nil {
-		content = styleDim.Render("(empty policy)")
+		content = m.theme.dim.Render("(empty policy)")
 	}
 	if m.lastErr != nil {
-		content = styleStale.Render(content)
+		content = m.theme.stale.Render(content)
 	}
 	m.output.SetContent(content)
 }
@@ -449,7 +515,13 @@ func truncateLeft(s string, width int) string {
 	return "…" + ansi.Cut(s, w-(width-1), w)
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+func (m model) render() string {
 	if m.width == 0 {
 		return ""
 	}
@@ -459,9 +531,9 @@ func (m model) View() string {
 	// Editor pane
 	edTitle := "Policy (Rego)"
 	if m.focus == paneEditor {
-		edTitle = styleActive.Render(edTitle)
+		edTitle = m.theme.active.Render(edTitle)
 	} else {
-		edTitle = styleDim.Render(edTitle)
+		edTitle = m.theme.dim.Render(edTitle)
 	}
 	name := "[no file]"
 	if m.policyPath != "" {
@@ -471,7 +543,7 @@ func (m model) View() string {
 		name += " *"
 	}
 	edPane := lipgloss.JoinVertical(lipgloss.Left,
-		header(innerWidth, edTitle, styleDim.Render(name)),
+		header(innerWidth, edTitle, m.theme.dim.Render(name)),
 		m.editor.View(),
 	)
 
@@ -479,39 +551,40 @@ func (m model) View() string {
 	outTitle := "Output"
 	switch {
 	case m.lastErr != nil:
-		outTitle = styleErr.Render("● error — showing last result")
+		outTitle = m.theme.err.Render("● error — showing last result")
 	case m.focus == paneOutput:
-		outTitle = styleActive.Render(outTitle)
+		outTitle = m.theme.active.Render(outTitle)
 	default:
-		outTitle = styleDim.Render(outTitle)
+		outTitle = m.theme.dim.Render(outTitle)
 	}
 	outInfo := fmt.Sprintf("%d files", m.fileCount)
 	if m.eval.combined {
 		outInfo = "combined"
 	}
-	outParts := []string{header(innerWidth, outTitle, styleDim.Render(outInfo))}
+	outParts := []string{header(innerWidth, outTitle, m.theme.dim.Render(outInfo))}
 	if box := m.errorBox(innerWidth); box != "" {
 		outParts = append(outParts, box)
 	}
 	outParts = append(outParts, m.output.View())
 	outPane := lipgloss.JoinVertical(lipgloss.Left, outParts...)
 
-	edStyle, outStyle := stylePane, stylePane
+	edStyle, outStyle := m.theme.pane, m.theme.pane
 	if m.focus == paneEditor {
-		edStyle = stylePaneFocus
+		edStyle = m.theme.paneFocus
 	} else {
-		outStyle = stylePaneFocus
+		outStyle = m.theme.paneFocus
 	}
-	paneHeight := innerHeight + 1
+	// Width and Height include the border.
+	paneHeight := innerHeight + 1 + 2
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		edStyle.Width(innerWidth).Height(paneHeight).MaxHeight(paneHeight+2).Render(edPane),
-		outStyle.Width(m.width-paneWidth-2).Height(paneHeight).MaxHeight(paneHeight+2).Render(outPane),
+		edStyle.Width(paneWidth).Height(paneHeight).MaxHeight(paneHeight).Render(edPane),
+		outStyle.Width(m.width-paneWidth).Height(paneHeight).MaxHeight(paneHeight).Render(outPane),
 	)
 
 	view := lipgloss.JoinVertical(lipgloss.Left, panes, m.statusLine())
 	if m.showHelp {
-		view = overlay(view, helpView(), m.width, m.height)
+		view = overlay(view, m.helpView(), m.width, m.height)
 	}
 	return view
 }
@@ -534,20 +607,20 @@ func (m model) statusLine() string {
 		"mode: " + mode,
 	}
 	if m.lastErr != nil {
-		parts = append(parts, styleErr.Render("1 error"))
+		parts = append(parts, m.theme.err.Render("1 error"))
 	}
 	if m.notice != "" {
 		parts = append(parts, m.notice)
 	}
 
 	left := strings.Join(parts, "   ")
-	right := styleDim.Render("^S save  ^R search  ^O switch  F1 help  ^C quit")
+	right := m.theme.dim.Render("^S save  ^R search  ^O switch  F1 help  ^C quit")
 
-	return styleDim.Render(header(m.width, left, right))
+	return m.theme.dim.Render(header(m.width, left, right))
 }
 
 func newOutputView() viewport.Model {
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	// Long JSON lines are cut at the pane edge; allow scrolling them with left/right.
 	vp.SetHorizontalStep(8)
 	return vp

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestHelpPopup(t *testing.T) {
@@ -14,19 +14,19 @@ func TestHelpPopup(t *testing.T) {
 	m.width, m.height = 100, 40
 	m.layout()
 
-	send := func(msg tea.KeyMsg) tea.Cmd {
+	send := func(msg tea.Msg) tea.Cmd {
 		t.Helper()
 		nm, cmd := m.Update(msg)
 		m = nm.(model)
 		return cmd
 	}
 
-	send(tea.KeyMsg{Type: tea.KeyF1})
+	send(tea.KeyPressMsg{Code: tea.KeyF1})
 	if !m.showHelp {
 		t.Fatal("F1 should show the help")
 	}
 
-	view := m.View()
+	view := m.render()
 	if !strings.Contains(view, "show / hide this help") {
 		t.Fatal("help should be drawn")
 	}
@@ -41,11 +41,11 @@ func TestHelpPopup(t *testing.T) {
 	}
 
 	// Keys don't reach the editor while the help is shown, and Ctrl+C only closes it.
-	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	send(textKey("x"))
 	if m.editor.Value() != "package main" {
 		t.Fatalf("value = %q", m.editor.Value())
 	}
-	cmd := send(tea.KeyMsg{Type: tea.KeyCtrlC})
+	cmd := send(ctrlKey('c'))
 	if m.showHelp {
 		t.Fatal("Ctrl+C should close the help")
 	}
@@ -55,8 +55,8 @@ func TestHelpPopup(t *testing.T) {
 		}
 	}
 
-	for _, k := range []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyF1}, {Type: tea.KeyRunes, Runes: []rune("q")}} {
-		send(tea.KeyMsg{Type: tea.KeyF1})
+	for _, k := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: tea.KeyF1}, textKey("q")} {
+		send(tea.KeyPressMsg{Code: tea.KeyF1})
 		send(k)
 		if m.showHelp {
 			t.Fatalf("%v should close the help", k)
@@ -64,12 +64,12 @@ func TestHelpPopup(t *testing.T) {
 	}
 
 	// "?" opens the help from the output pane but is typed in the editor.
-	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	send(textKey("?"))
 	if m.showHelp || m.editor.Value() != "package main?" {
 		t.Fatalf("? in the editor: help = %v, value = %q", m.showHelp, m.editor.Value())
 	}
-	send(tea.KeyMsg{Type: tea.KeyCtrlO})
-	send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	send(ctrlKey('o'))
+	send(textKey("?"))
 	if !m.showHelp {
 		t.Fatal("? in the output pane should show the help")
 	}
@@ -82,7 +82,7 @@ func TestHelpPopupSmallTerminal(t *testing.T) {
 	m.layout()
 	m.showHelp = true
 
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.render(), "\n")
 	if len(lines) > m.height {
 		t.Errorf("view height = %d, want <= %d", len(lines), m.height)
 	}

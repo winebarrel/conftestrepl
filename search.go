@@ -4,9 +4,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // textPos is a cursor position in the editor: a line index and a rune column in that line.
@@ -102,7 +102,7 @@ func (m *model) moveEditorCursor(p textPos) {
 			break
 		}
 	}
-	m.editor.SetCursor(p.col)
+	m.editor.SetCursorColumn(p.col)
 	// Update repositions the textarea viewport to the cursor.
 	m.editor, _ = m.editor.Update(nil)
 }
@@ -139,23 +139,28 @@ func (m *model) runSearch(from textPos) {
 	}
 }
 
-func (m model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m model) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		m.endSearch()
 		return m, nil
 
-	case tea.KeyEsc, tea.KeyCtrlC:
+	case "esc", "ctrl+c":
 		m.endSearch()
 		m.moveEditorCursor(m.searchOrigin)
 		return m, nil
 
-	case tea.KeyCtrlR:
+	case "ctrl+r":
 		// Next match, after the current one.
 		m.runSearch(textPos{row: m.searchMatch.row, col: m.searchMatch.col + 1})
 		return m, nil
 	}
 
+	return m.updateSearchInput(msg)
+}
+
+// updateSearchInput passes msg to the search prompt and searches again if the query changed.
+func (m model) updateSearchInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.search.Value()
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
@@ -176,7 +181,7 @@ const searchNotFound = "  not found"
 func (m model) searchView() string {
 	v := m.search.View()
 	if m.searchFailed {
-		v += styleErr.Render(searchNotFound)
+		v += m.theme.err.Render(searchNotFound)
 	}
 	return v
 }

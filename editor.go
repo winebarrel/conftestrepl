@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
+	"charm.land/bubbles/v2/textarea"
 )
 
 // expandTabs replaces every tab with width spaces. The editor never holds tab characters
