@@ -180,3 +180,32 @@ b := parse_config_file("testdata/inputs/config.json")
 		t.Errorf("parse_config_file = %v", got["b"])
 	}
 }
+
+func TestEvaluatePrints(t *testing.T) {
+	const src = "package main\n\nkind := input.kind if {\n  print(\"kind:\", input.kind)\n}\n"
+
+	ev := &evaluator{configs: mustLoad(t)}
+	_, prints, err := ev.evaluateWithPrints(context.Background(), "policy.rego", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"[testdata/inputs/config.json] policy.rego:4: kind: Config",
+		"[testdata/inputs/deployment.yaml] policy.rego:4: kind: Deployment",
+		"[testdata/inputs/multi.yaml] policy.rego:4: kind: ConfigMap",
+		"[testdata/inputs/multi.yaml] policy.rego:4: kind: Service",
+		"[testdata/inputs/sub/service.yaml] policy.rego:4: kind: Service",
+	}
+	if !reflect.DeepEqual(prints, want) {
+		t.Errorf("prints = %q, want %q", prints, want)
+	}
+
+	ev.combined = true
+	_, prints, err = ev.evaluateWithPrints(context.Background(), "policy.rego", "package main\n\nn := count(input) if {\n  print(\"n:\", count(input))\n}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"policy.rego:4: n: 5"}; !reflect.DeepEqual(prints, want) {
+		t.Errorf("combined prints = %q, want %q", prints, want)
+	}
+}

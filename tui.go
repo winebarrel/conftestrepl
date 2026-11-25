@@ -34,6 +34,7 @@ type debounceMsg struct{ seq int }
 type evalMsg struct {
 	seq      int
 	output   string
+	prints   []string
 	err      error
 	canceled bool
 }
@@ -117,6 +118,7 @@ type model struct {
 	cancelEval context.CancelFunc
 	quitArmed  bool
 	lastOutput string
+	lastPrints []string
 	lastErr    error
 
 	width  int
@@ -180,7 +182,7 @@ func (m *model) evalCmd(seq int) tea.Cmd {
 
 	return func() tea.Msg {
 		defer cancel()
-		out, err := ev.evaluate(ctx, name, src)
+		out, prints, err := ev.evaluateWithPrints(ctx, name, src)
 
 		switch ctx.Err() {
 		case context.Canceled:
@@ -189,7 +191,7 @@ func (m *model) evalCmd(seq int) tea.Cmd {
 			err = fmt.Errorf("evaluation timed out after %s", evalTimeout)
 		}
 
-		return evalMsg{seq: seq, output: out, err: err}
+		return evalMsg{seq: seq, output: out, prints: prints, err: err}
 	}
 }
 
@@ -224,6 +226,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.lastErr = nil
 			m.lastOutput = msg.output
+			m.lastPrints = msg.prints
 		}
 		m.layout()
 		if m.searchingOutput() {
@@ -493,7 +496,11 @@ func (m model) outputText() string {
 	if m.lastOutput == "" && m.lastErr == nil {
 		return emptyPolicy
 	}
-	return m.lastOutput
+	if len(m.lastPrints) == 0 {
+		return m.lastOutput
+	}
+	// print() output goes above the result, separated by a blank line.
+	return strings.Join(m.lastPrints, "\n") + "\n\n" + m.lastOutput
 }
 
 const emptyPolicy = "(empty policy)"
