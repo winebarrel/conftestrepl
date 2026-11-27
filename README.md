@@ -1,6 +1,7 @@
 # conftestrepl
 
 [![CI](https://github.com/winebarrel/conftestrepl/actions/workflows/ci.yml/badge.svg)](https://github.com/winebarrel/conftestrepl/actions/workflows/ci.yml)
+[![AI Generated](https://img.shields.io/badge/AI%20Generated-Claude-orange?logo=anthropic)](https://claude.com/product/claude-code)
 
 A TUI REPL for writing [Rego](https://www.openpolicyagent.org/docs/latest/policy-language/) policies against [conftest](https://www.conftest.dev/) inputs.
 
